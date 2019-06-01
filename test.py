@@ -4,5 +4,5 @@ import dict_ldoce
 import source_reader
 
 ldoce = dict_ldoce.DictLdoce(source_reader.FileReader)
-ldoce.word('serve')
+print(ldoce.word('serve'))
 
