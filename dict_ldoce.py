@@ -6,6 +6,8 @@ from pyquery import PyQuery as pq
 定义Ldoce统一的输出格式
 
 result = {
+    word: "",
+    link: "",
     word_family: [(), ()],
     dicts: [
         {
@@ -44,7 +46,7 @@ class LdoceTextFomater:
     def output(self):
         text = ""
         word_fmaily = self.result.get('word_family')
-        if len(word_fmaily) > 0 :
+        if word_fmaily is not None and len(word_fmaily) > 0 :
             text += "[Word Family]" + self.newline + self.indent
             for word in word_fmaily:
                 if len(word) == 2 and word[0] != "" and word[1] != "":
@@ -52,13 +54,14 @@ class LdoceTextFomater:
 
         text += self.twonewline
         dicts = self.result.get('dicts')
-        if len(dicts) <= 0:
+        if dicts is not None and len(dicts) <= 0:
             return text
         
         # 以下是dicts不为空时需要处理的逻辑
         for dict in dicts:
             # 解析word base
             word_base = dict.get('word_base')
+            # 如果这个不存在那么后面的解析也就没有意义了
             # 过滤掉定义元组中为空的部分
             items = [item for item in word_base if item != ""]
             if len(items) is not 0:
@@ -75,12 +78,12 @@ class LdoceTextFomater:
                 # 过滤掉定义元组中为空的部分
                 items = [item for item in definiton if item != ""]
                 if len(items) is not 0:
-                    text += ("<{}>" + self.twonewline).format(' | '.join(items))
+                    text += ("<{}>" + self.newline).format(' | '.join(items))
 
                 # 解析例句
                 examples = explain.get('examples')
                 if len(examples) > 0 :
-                    text += self.newline.join(["* {}".format(item) for item in examples if item != ""])
+                    text += self.newline.join([(self.indent + "* {}").format(item) for item in examples if item != ""])
                     text += self.newline
 
                 # 解析用法
@@ -88,16 +91,17 @@ class LdoceTextFomater:
                 if len(usages) > 0 :
                     for usage in usages:
                         if usage[0] != "":
-                            text += "#" + usage[0] + "#" + self.newline
+                            text += self.indent + "#" + usage[0] + "#" + self.newline
                         else:
                             continue
                         if usage[1] != "":
-                            text += self.indent + '-' + usage[1] + self.newline
+                            text += (self.indent * 2) + '-' + usage[1] + self.newline
+                text += self.newline
 
-                text += self.twonewline
-
-        
-
+        # 去掉最后一个\n
+        text = text.strip(self.newline)
+        text += self.twonewline + self.result['link']
+        text = "{}{}".format(self.result.get('word'), self.spliter) + text + self.wordspliter
         return text
 
 
@@ -121,9 +125,13 @@ class DictLdoce:
         self.domobj = pq(self.source_text)
 
     def word(self, word):
+        self.result = {}
         # 解析网页源码
-        self.__read_source_text(self.ldoce_url_base.format(word))
+        url = self.ldoce_url_base.format(word)
+        self.__read_source_text(url)
 
+        self.result['word'] = word
+        self.result['link'] = url
         # 解析词族
         word_family = self.__find_word_family()
         if len(word_family) is not 0:
@@ -264,14 +272,18 @@ class LdoceWordExplainHandler:
         self.explains.append(explain)
                 
     def __read_sense_definition(self, sense_dom):
-        return (
-            # 单词分类
-            sense_dom.find('span.SIGNPOST').text(),
-            # 单词语法, 比如动词是及物动词还是不及物动词
-            sense_dom.find('span.GRAM').text(),
-            # 这个单词的详细的英文解释
-            sense_dom.find('span.DEF').text()
-        )
+        # 单词分类
+        sign = sense_dom.find('span.SIGNPOST').text()
+        # 单词语法, 比如动词是及物动词还是不及物动词
+        gram = sense_dom.find('span.GRAM').text()
+        # 这个单词的详细的英文解释
+        meaning = sense_dom.find('span.DEF').text()
+        if sign == "" and gram == "" and meaning =="":
+            # 如果这个三个值都为空, 那么就需要考虑是否是下面这种情况了
+            if sense_dom.find("span.Crossref") is not None:
+                meaning = sense_dom.find("a.crossRef>span.REFHWD").text()
+
+        return (sign, gram, meaning)
 
     def __read_sense_example(self, example_dom):
         return example_dom.text()
